@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Data Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js@2.27.1/dist/plotly.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        #graph {
+            width: 80%;
+            height: 600px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select {
+            width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Excel Data Visualization</h1>
+    <div class="controls">
+        <label for="fileInput">Upload Excel File: </label>
+        <input type="file" id="fileInput" accept=".xlsx, .xls">
+        <label for="graphType">Select Graph Type: </label>
+        <select id="graphType">
+            <optgroup label="Simple">
+                <option value="scatter">Scatter</option>
+                <option value="bar">Bar</option>
+                <option value="line">Line</option>
+                <option value="area">Area</option>
+                <option value="heatmap">Heatmap</option>
+                <option value="table">Table</option>
+                <option value="contour">Contour</option>
+                <option value="pie">Pie</option>
+            </optgroup>
+            <optgroup label="Distributions">
+                <option value="box">Box</option>
+                <option value="violin">Violin</option>
+                <option value="histogram">Histogram</option>
+                <option value="histogram2d">2D Histogram</option>
+                <option value="histogram2dcontour">2D Contour Histogram</option>
+            </optgroup>
+            <optgroup label="3D">
+                <option value="scatter3d">3D Scatter</option>
+                <option value="line3d">3D Line</option>
+                <option value="surface">3D Surface</option>
+                <option value="mesh3d">3D Mesh</option>
+                <option value="cone">Cone</option>
+                <option value="streamtube">Streamtube</option>
+            </optgroup>
+            <optgroup label="Maps">
+                <option value="tilemap">Tile Map</option>
+                <option value="atlasmap">Atlas Map</option>
+                <option value="choropleth">Choropleth Map</option>
+                <option value="choroplethatlas">Choropleth Atlas Map</option>
+                <option value="densitytilemap">Density Tile Map</option>
+            </optgroup>
+            <optgroup label="Finance">
+                <option value="candlestick">Candlestick</option>
+                <option value="ohlc">OHLC</option>
+                <option value="waterfall">Waterfall</option>
+                <option value="funnel">Funnel</option>
+                <option value="funnelarea">Funnel Area</option>
+            </optgroup>
+            <optgroup label="Specialized">
+                <option value="scatterpolar">Polar Scatter</option>
+                <option value="barpolar">Polar Bar</option>
+                <option value="scatterternary">Ternary Scatter</option>
+                <option value="sunburst">Sunburst</option>
+                <option value="treemap">Treemap</option>
+                <option value="sankey">Sankey</option>
+            </optgroup>
+        </select>
+    </div>
+    <div id="graph"></div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', handleFile);
+        document.getElementById('graphType').addEventListener('change', updateGraph);
+
+        let data = { x: [], y: [], z: [], z2: [], sheet: null };
+
+        function handleFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const arrayBuffer = e.target.result;
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const firstSheet = workbook.SheetNames[0];
+                data.sheet = workbook.Sheets[firstSheet];
+                updateGraph();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function updateGraph() {
+            if (!data.sheet) {
+                alert('Please upload an Excel file first.');
+                return;
+            }
+
+            const graphType = document.getElementById('graphType').value;
+            const range = XLSX.utils.decode_range(data.sheet['!ref']);
+            data.x = [];
+            data.y = [];
+            data.z = [];
+            data.z2 = [];
+
+            // Extract data: x (col 0), y (col 1), z (col 2), z2 (col 3)
+            for (let row = range.s.r + 1; row <= range.e.r; row++) {
+                const xCell = data.sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+                const yCell = data.sheet[XLSX.utils.encode_cell({ r: row, c: 1 })];
+                const zCell = data.sheet[XLSX.utils.encode_cell({ r: row, c: 2 })];
+                const z2Cell = data.sheet[XLSX.utils.encode_cell({ r: row, c: 3 })];
+                data.x.push(xCell ? xCell.v : null);
+                data.y.push(yCell ? (yCell.v || 0) : 0);
+                data.z.push(zCell ? zCell.v : null);
+                data.z2.push(z2Cell ? z2Cell.v : null);
+            }
+
+            // For Surface, collect numeric columns after x as 2D z array
+            let zMatrix = [];
+            if (graphType === 'surface') {
+                for (let row = range.s.r + 1; row <= range.e.r; row++) {
+                    let rowData = [];
+                    for (let col = 1; col <= range.e.c; col++) {
+                        const cell = data.sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+                        const value = cell ? cell.v : 0;
+                        rowData.push(typeof value === 'number' ? value : 0);
+                    }
+                    zMatrix.push(rowData);
+                }
+            }
+
+            let trace = {};
+            let layout = { title: `Data Visualization (${graphType})`, xaxis: { title: 'X Axis' }, yaxis: { title: 'Y Axis' } };
+
+            // Check if z is numeric for Heatmap/Contour
+            const isNumericZ = data.z.every(z => z === null || typeof z === 'number');
+
+            switch (graphType) {
+                // Simple
+                case 'scatter':
+                    trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+                    break;
+                case 'bar':
+                    trace = { x: data.x, y: data.y, type: 'bar' };
+                    break;
+                case 'line':
+                    trace = { x: data.x, y: data.y, type: 'scatter', mode: 'lines' };
+                    break;
+                case 'area':
+                    trace = { x: data.x, y: data.y, type: 'scatter', fill: 'tozeroy' };
+                    break;
+                case 'heatmap':
+                    if (isNumericZ) {
+                        trace = { z: [data.z.filter(z => z !== null)], type: 'heatmap', x: data.x };
+                    } else {
+                        trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+                        layout.title = 'Heatmap not supported for non-numeric Z';
+                    }
+                    break;
+                case 'table':
+                    trace = { type: 'table', header: { values: ['X', 'Y'], fill: { color: '#C2D4FF' } }, cells: { values: [data.x, data.y], fill: { color: '#F5F8FF' } } };
+                    layout = { title: 'Data Table' };
+                    break;
+                case 'contour':
+                    if (isNumericZ) {
+                        trace = { z: [data.z.filter(z => z !== null)], type: 'contour', x: data.x };
+                    } else {
+                        trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+                        layout.title = 'Contour not supported for non-numeric Z';
+                    }
+                    break;
+                case 'pie':
+                    trace = { labels: data.x, values: data.y, type: 'pie' };
+                    layout = { title: 'Pie Chart' };
+                    break;
+
+                // Distributions
+                case 'box':
+                    trace = { y: data.y, type: 'box', name: 'Data' };
+                    layout.xaxis.title = 'Category';
+                    break;
+                case 'violin':
+                    trace = { y: data.y, type: 'violin', name: 'Data' };
+                    layout.xaxis.title = 'Category';
+                    break;
+                case 'histogram':
+                    trace = { x: data.y, type: 'histogram' };
+                    layout.xaxis.title = 'Values';
+                    break;
+                case 'histogram2d':
+                    trace = { x: data.x, y: data.y, type: 'histogram2d' };
+                    break;
+                case 'histogram2dcontour':
+                    trace = { x: data.x, y: data.y, type: 'histogram2dcontour' };
+                    break;
+
+                // 3D
+                case 'scatter3d':
+                    trace = { x: data.x, y: data.y, z: data.z, mode: 'markers', type: 'scatter3d' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+                case 'line3d':
+                    trace = { x: data.x, y: data.y, z: data.z, mode: 'lines', type: 'scatter3d' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+                case 'surface':
+                    trace = { z: zMatrix, type: 'surface' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+                case 'mesh3d':
+                    trace = { x: data.x, y: data.y, z: data.z, type: 'mesh3d' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+                case 'cone':
+                    trace = { x: data.x, y: data.y, z: data.z, u: data.z, v: data.y, w: data.x, type: 'cone' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+                case 'streamtube':
+                    trace = { x: data.x, y: data.y, z: data.z, u: data.z, v: data.y, w: data.x, type: 'streamtube' };
+                    layout.scene = { xaxis: { title: 'X' }, yaxis: { title: 'Y' }, zaxis: { title: 'Z' } };
+                    break;
+
+                // Maps
+                case 'tilemap':
+                case 'atlasmap':
+                    if (data.z2.some(z2 => z2 !== null) && data.z.some(z => z !== null)) {
+                        trace = {
+                            type: 'scattergeo',
+                            lon: data.z2.filter(lon => lon !== null && !isNaN(lon)),
+                            lat: data.z.filter(lat => lat !== null && !isNaN(lat)),
+                            mode: 'markers',
+                            text: data.x,
+                            marker: { size: data.y.map(v => typeof v === 'number' ? v / 5 : 10) }
+                        };
+                    } else {
+                        trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+                        layout.title = 'Map not supported: Missing Lat/Lon';
+                    }
+                    layout.geo = { scope: graphType === 'atlasmap' ? 'world' : 'world', projection: { type: 'mercator' } };
+                    break;
+                case 'choropleth':
+                case 'choroplethatlas':
+                    trace = {
+                        type: 'choropleth',
+                        locations: data.x.filter(x => x !== null),
+                        z: data.y,
+                        locationmode: 'country names',
+                        text: data.x
+                    };
+                    layout.geo = { scope: graphType === 'choroplethatlas' ? 'world' : 'world', projection: { type: 'mercator' } };
+                    break;
+                case 'densitytilemap':
+                    if (data.z2.some(z2 => z2 !== null) && data.z.some(z => z !== null)) {
+                        trace = {
+                            type: 'densitymapbox',
+                            lon: data.z2.filter(lon => lon !== null && !isNaN(lon)),
+                            lat: data.z.filter(lat => lat !== null && !isNaN(lat)),
+                            z: data.y,
+                            radius: 20
+                        };
+                        layout.mapbox = { style: 'open-street-map', center: { lon: -90, lat: 30 }, zoom: 2 };
+                    } else {
+                        trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+                        layout.title = 'Density Map not supported: Missing Lat/Lon';
+                    }
+                    break;
+
+                // Finance
+                case 'candlestick':
+                    trace = { x: data.x, close: data.y, high: data.y.map(v => typeof v === 'number' ? v * 1.1 : v), low: data.y.map(v => typeof v === 'number' ? v * 0.9 : v), open: data.y, type: 'candlestick' };
+                    break;
+                case 'ohlc':
+                    trace = { x: data.x, close: data.y, high: data.y.map(v => typeof v === 'number' ? v * 1.1 : v), low: data.y.map(v => typeof v === 'number' ? v * 0.9 : v), open: data.y, type: 'candlestick' };
+                    break;
+                case 'waterfall':
+                    trace = { x: data.x, y: data.y, type: 'waterfall' };
+                    break;
+                case 'funnel':
+                    trace = { x: data.y, y: data.x, type: 'funnel' };
+                    break;
+                case 'funnelarea':
+                    trace = { labels: data.x, values: data.y, type: 'funnelarea' };
+                    layout = { title: 'Funnel Area Chart' };
+                    break;
+
+                // Specialized
+                case 'scatterpolar':
+                    trace = { r: data.y, theta: data.x, type: 'scatterpolar', mode: 'markers' };
+                    layout.polar = { radialaxis: { visible: true } };
+                    break;
+                case 'barpolar':
+                    trace = { r: data.y, theta: data.x, type: 'barpolar' };
+                    layout.polar = { radialaxis: { visible: true } };
+                    break;
+                case 'scatterternary':
+                    trace = { a: data.x, b: data.y, c: data.z, type: 'scatterternary', mode: 'markers' };
+                    layout.ternary = { aaxis: { title: 'X' }, baxis: { title: 'Y' }, caxis: { title: 'Z' } };
+                    break;
+                case 'sunburst':
+                    trace = { labels: data.x, values: data.y, type: 'sunburst' };
+                    layout = { title: 'Sunburst Chart' };
+                    break;
+                case 'treemap':
+                    trace = { labels: data.x, values: data.y, type: 'treemap' };
+                    layout = { title: 'Treemap Chart' };
+                    break;
+                case 'sankey':
+                    // Sanitize data for sankey
+                    const validNodes = [...new Set([...data.x, ...data.z.filter(z => z !== null && typeof z !== 'number')])];
+                    const sourceIndices = data.x.map(label => validNodes.indexOf(label));
+                    const targetIndices = data.z.map((z, i) => {
+                        if (z !== null && typeof z !== 'number') {
+                            return validNodes.indexOf(z);
+                        }
+                        return validNodes.indexOf(data.x[i]); // Fallback to self-loop
+                    });
+                    trace = {
+                        type: 'sankey',
+                        node: { label: validNodes },
+                        link: {
+                            source: sourceIndices,
+                            target: targetIndices,
+                            value: data.y
+                        }
+                    };
+                    layout = { title: 'Sankey Diagram' };
+                    break;
+
+                default:
+                    trace = { x: data.x, y: data.y, type: 'scatter', mode: 'markers' };
+            }
+
+            Plotly.newPlot('graph', [trace], layout);
+        }
+    </script>
+</body>
+</html>

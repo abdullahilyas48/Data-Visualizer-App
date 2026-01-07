@@ -1,0 +1,11 @@
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment (Macbook)
+source venv/bin/activate
+
+# Install required libraries
+pip install flask flask-cors pandas openpyxl plotly.
+
+# Run the server
+python app.py

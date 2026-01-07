@@ -1,0 +1,42 @@
+plotly
+excel data 
+
+Sankey 
+
+
+1 = index.html (From Grok) *use with live server extension.
+
+2 = app.py using Streamlit (From chatgpt)
+
+commands to run 2nd appraoch:
+open cmd in folder run these 2 commands, run first command only once.
+1. pip install streamlit plotly pandas openpyxl
+2. streamlit run app.py
+
+
+Order of files for 2nd approach
+
+🔹Simple Charts
+general_data.xlsx
+
+🔹 Distribution Charts
+distribution_data.xlsx
+
+🔹 3D Charts
+surface_data.xlsx
+
+mesh_data.xlsx
+
+streamtube_data.xlsx
+
+🔹 Finance Charts
+finance_data.xlsx
+
+🔹 Specialized Charts
+polar_data.xlsx
+
+ternary_data.xlsx
+
+sunburst_data.xlsx
+
+sankey_data.xlsx
