@@ -5,7 +5,7 @@ python3 -m venv venv
 source venv/bin/activate
 
 # Install required libraries
-pip install flask flask-cors pandas openpyxl plotly.
+pip install flask flask-cors pandas openpyxl plotly
 
 # Run the server
 python app.py
